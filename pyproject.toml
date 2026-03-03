@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.20"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cred"
+version = "0.1.0"
+description = "Tiny credential broker with pluggable providers."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+cred = "cred.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cred"]
