@@ -10,6 +10,7 @@ from pathlib import Path
 from .config import load_config
 from .errors import CredError, ConfigError
 from .logging_utils import setup_logging
+from .providers import PROVIDERS
 from .resolver import resolve_locator, get_provider
 
 log = logging.getLogger("cred.cli")
@@ -28,6 +29,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", help="Path to config.toml (default: ~/.config/cred/config.toml)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable informational logging")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging (never prints secrets)")
+    parser.add_argument(
+        "--provider",
+        choices=list(PROVIDERS),
+        metavar="PROVIDER",
+        help=f"Override the provider from config. Choices: {', '.join(PROVIDERS)}",
+    )
 
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -44,9 +51,11 @@ def main(argv: list[str] | None = None) -> int:
     val_group.add_argument("--prompt", action="store_true", help="Prompt securely for the value (no echo).")
 
     p_set.add_argument(
-        "--create",
-        action="store_true",
-        help="Create the item/locator if it doesn't exist (provider-dependent).",
+        "--no-create",
+        dest="create",
+        action="store_false",
+        default=True,
+        help="Fail if the item/locator doesn't exist instead of creating it.",
     )
 
     p_exists = sub.add_parser("exists", help="Check if a reference exists")
@@ -84,17 +93,25 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         cfg = load_config(None if args.config is None else Path(args.config))
-        provider = get_provider(cfg)
-        log.info("provider=%s", cfg.provider)
+        if args.provider:
+            provider_cls = PROVIDERS.get(args.provider)
+            if provider_cls is None:
+                raise ConfigError(f"Unknown provider: {args.provider}")
+            provider = provider_cls()
+            active_provider_name = args.provider
+        else:
+            provider = get_provider(cfg)
+            active_provider_name = cfg.provider
+        log.info("provider=%s", active_provider_name)
 
         if args.cmd == "provider":
-            print(cfg.provider)
+            print(active_provider_name)
             return 0
 
         if args.cmd == "doctor":
             # Generic checks
             print("cred doctor")
-            print(f"  provider: {cfg.provider}")
+            print(f"  provider: {active_provider_name}")
             try:
                 info = getattr(provider, "info", None)
                 if info is not None:
