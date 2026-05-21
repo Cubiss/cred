@@ -3,18 +3,18 @@
 A tiny credential broker with pluggable backends.
 
 It gives your scripts a stable interface (`cred get/set/exists`) while keeping the actual storage provider swappable.
-Right now it supports **1Password** via the `op` CLI, with all secrets stored in a dedicated vault named **`cred`**.
+Supports **1Password** (`op`) and **Proton Pass** (`proton`), with all secrets stored in a dedicated vault named **`cred`**.
 
 ## Backend model
 
-For portability across providers, the 1Password backend stores **one JSON blob per reference** in a single concealed custom field named `data`.
+Both providers store **one JSON blob per reference** in a single concealed/hidden custom field named `data`.
 
 - `cred set <ref> --field pass ...` updates a key inside that JSON object.
 - `cred get-json <ref>` / `cred set-json <ref>` operate on the whole blob.
 
 ## Features
 
-- Pluggable credential backends (current: **1Password** via `op`)
+- Pluggable credential backends: **1Password** (`op`), **Proton Pass** (`proton`)
 - Provider-agnostic interface for scripts: `cred get`, `cred set`, `cred exists`
 - Whole-blob operations: `cred get-json`, `cred set-json`
 - Safe inspection: `cred dump` (redacted by default)
@@ -40,16 +40,17 @@ pip install --user git+https://github.com/Cubiss/cred.git
 ## Requirements
 
 - Python 3.11+
-- `op` (1Password CLI) available in `PATH` for the `op` provider
-- A 1Password vault named **`cred`**
+- `op` (1Password CLI) in `PATH` — for the `op` provider
+- `pass-cli` (Proton Pass CLI) in `PATH` — for the `proton` provider
+- A vault named **`cred`** in your chosen provider
 
-## 1Password setup
+## Provider setup
+
+### 1Password
 
 1. Create a vault named **`cred`** in the 1Password app.
 2. Install the 1Password CLI (`op`) and sign in.
-3. Optional: enable “Integrate with 1Password CLI” in the desktop app for a smoother flow.
-
-Quick sanity checks:
+3. Optional: enable “Integrate with 1Password CLI” in the desktop app for biometric unlock.
 
 ```bash
 op --version
@@ -57,19 +58,42 @@ op whoami
 op vault get cred
 ```
 
+### Proton Pass
+
+1. Create a vault named **`cred`** in Proton Pass.
+2. Install `pass-cli` and authenticate:
+
+```bash
+pass-cli login               # browser-based (default)
+pass-cli login --interactive # username + password
+pass-cli login --pat pst_<token>::<key>  # personal access token
+```
+
+3. Verify the session:
+
+```bash
+pass-cli test
+```
+
+There is no shared session with the Proton Pass desktop app — the CLI manages its own session.
+
 ## Configuration
 
-Create `~/.config/cred/config.toml`:
+Create `~/.config/cred/config.toml` and set your provider:
 
 ```toml
+# 1Password
 provider = "op"
+```
+
+```toml
+# Proton Pass
+provider = "proton"
 ```
 
 Maps are **optional**. If you want an indirection layer (rename items later, use UUIDs, etc.):
 
 ```toml
-provider = "op"
-
 [map]
 "transmission/rpc" = "Transmission RPC"
 ```
@@ -84,6 +108,13 @@ user = "user"
 
 ## Usage
 
+You can override the configured provider for any call with `--provider`:
+
+```bash
+cred --provider proton get transmission/rpc --field user
+cred --provider op    get transmission/rpc --field user
+```
+
 ### Read a key
 
 ```bash
@@ -96,20 +127,22 @@ cred get transmission/rpc --field pass
 Secure prompt (no echo):
 
 ```bash
-cred set transmission/rpc --field pass --prompt --create
+cred set transmission/rpc --field pass --prompt
 ```
 
 From stdin (useful for pipelines):
 
 ```bash
-printf '%s' 'supersecret' | cred set transmission/rpc --field pass --value - --create
+printf '%s' 'supersecret' | cred set transmission/rpc --field pass --value -
 ```
+
+Pass `--no-create` to fail instead of creating a new item when the reference doesn't exist yet.
 
 ### Work with the whole JSON blob
 
 ```bash
 cred get-json transmission/rpc
-printf '%s' '{"user":"alice","pass":"secret"}' | cred set-json transmission/rpc --value - --create
+printf '%s' '{"user":"alice","pass":"secret"}' | cred set-json transmission/rpc --value -
 ```
 
 ## Exit codes
