@@ -28,13 +28,13 @@ For portability across providers, the 1Password backend stores **one JSON blob p
 Recommended for personal CLI tools: **pipx**.
 
 ```bash
-pipx install git+ssh://github.com/Cubiss/cred.git
+pipx install git+https://github.com/Cubiss/cred.git
 ```
 
 Or with pip:
 
 ```bash
-pip install --user git+ssh://github.com/Cubiss/cred.git
+pip install --user git+https://github.com/Cubiss/cred.git
 ```
 
 ## Requirements
