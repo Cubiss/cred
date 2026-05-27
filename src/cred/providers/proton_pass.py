@@ -18,8 +18,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
+import sys
+import webbrowser
 from typing import Any, Dict
 
 from .base import Provider, ProviderInfo
@@ -40,6 +43,42 @@ class ProtonPassProvider(Provider):
     def __init__(self) -> None:
         if shutil.which(self.BINARY) is None:
             raise ProviderMissing(f"Proton Pass CLI '{self.BINARY}' not found in PATH")
+        self._login()
+
+    def _login(self) -> None:
+        """Run pass-cli login, stream output to stderr, open any auth URLs in browser.
+
+        Silent on fast-path ("already authenticated"); only prints when a real
+        interactive login flow starts or when login fails.
+        """
+        _url_re = re.compile(r'https://\S+')
+        proc = subprocess.Popen(
+            [self.BINARY, "login"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        collected: list[str] = []
+        interactive = False
+        for raw in proc.stdout:  # type: ignore[union-attr]
+            line = raw.rstrip('\n')
+            collected.append(line)
+            m = _url_re.search(line)
+            if m:
+                if not interactive:
+                    for prev in collected[:-1]:
+                        print(prev, file=sys.stderr, flush=True)
+                    interactive = True
+                print(line, file=sys.stderr, flush=True)
+                webbrowser.open(m.group(0))
+            elif interactive:
+                print(line, file=sys.stderr, flush=True)
+        proc.wait()
+        output = '\n'.join(collected)
+        if proc.returncode != 0 and "Already authenticated" not in output:
+            if not interactive:
+                print(output, file=sys.stderr, flush=True)
+            raise Locked("Proton Pass authentication failed")
 
     @property
     def info(self) -> ProviderInfo:
@@ -65,7 +104,7 @@ class ProtonPassProvider(Provider):
         err = (stderr or "").lower()
         if "this operation requires an authenticated client" in err:
             return Locked("Proton Pass CLI is not authenticated — run: pass-cli login")
-        if "no item found" in err:
+        if "no item found" in err or "field does not exist" in err:
             return NotFound("Item not found")
         return RuntimeError(stderr.strip())
 
